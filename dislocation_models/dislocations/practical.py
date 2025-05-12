@@ -15,8 +15,8 @@ fixed_rake = 90.
 param_ranges = {
     "y1": (-100., 100.),
     "y2": (-100., 100.),
-    "x1": (-100., 100.),
-    "x2": (-100., 100.),
+    "x1": (-50., 50.),
+    "x2": (-50., 50.),
     "dip": (5., 85.),
     "top_depth": (-10., 0),
     "bottom_depth": (-20., -5.),
@@ -40,7 +40,8 @@ def randomize_parameters_and_write_to_pickle(pickle_file: str,
                                                 x1: Union[float, int] = None, x2: Union[float, int] = None,
                                                 dip: Union[float, int] = None,
                                                 top_depth: Union[float, int] = None, bottom_depth: Union[float, int] = None,
-                                                slip_magnitude: Union[float, int] = None, rake: Union[float, int] = None):
+                                                slip_magnitude: Union[float, int] = None, rake: Union[float, int] = None,
+                                                x1_eq_x2: bool = False) -> None:
     """
     Function to randomize parameters for a fault and write to a pickle file.
     :param pickle_file: Path to the pickle file to write to.
@@ -100,6 +101,8 @@ def randomize_parameters_and_write_to_pickle(pickle_file: str,
             except ValueError:
                 raise ValueError(f"{param} {value} is not a valid float")
             output_dict[param] = value
+    if x1_eq_x2:
+        output_dict["x1"] = output_dict["x2"]
     
     # randomize dip if not specified
     if dip is None:
@@ -163,7 +166,16 @@ def randomize_parameters_and_write_to_pickle_fixed_top_bottom(pickle_file: str, 
         top_depth=fixed_top, bottom_depth=fixed_bottom,
         rake=fixed_rake)
     
-                                                              
+
+def randomize_parameters_and_write_to_pickle_2d(pickle_file: str):
+    """
+    Function to randomize parameters for a fault and write to a pickle file.
+    :param pickle_file: Path to the pickle file to write to.
+    :return: None
+    """
+    rake = np.random.choice([90., 270.])
+    randomize_parameters_and_write_to_pickle(pickle_file=pickle_file,
+        y1=fixed_y1, y2=fixed_y2, x1_eq_x2=True, rake=rake)                              
 
 
 def read_parameters_from_pickle(pickle_file: str) -> dict:
@@ -181,6 +193,8 @@ def read_parameters_from_pickle(pickle_file: str) -> dict:
         if param not in params:
             raise ValueError(f"Parameter {param} is missing from the pickle file")
     return params
+
+
 
 
 def profile_2d_displacement(min_x: float = -100., max_x: float = 100., x_inc: float = 1., top_depth: float = 0.,
@@ -203,7 +217,7 @@ def practical_general_2d_generic(
     y1: Union[float, int], y2: Union[float, int], x1: Union[float, int], x2: Union[float, int],
     dip: Union[float, int], top_depth: Union[float, int], bottom_depth: Union[float, int],
     slip_magnitude: Union[float, int], rake: Union[float, int], pickle_file: str = None,
-    min_x: float = -100., max_x: float = 100., x_inc: float = 1.) -> np.ndarray:
+    min_x: float = -100., max_x: float = 100., x_inc: float = 1., data_only: bool = False) -> np.ndarray:
     """
     Function to calculate the dislocation displacement for a given set of parameters.
     :param y1: Y coordinate of the first point.
@@ -236,9 +250,10 @@ def practical_general_2d_generic(
 
     # convert to m from km
     y1, y2, x1, x2, top_depth, bottom_depth = 1000. * np.array([y1, y2, x1, x2, top_depth, bottom_depth])
-    for param in ["y1", "y2", "x1", "x2", "top_depth", "bottom_depth"]:
-        if param in params:
-            params[param] = 1000. * params[param]
+    if pickle_file is not None:
+        for param in ["y1", "y2", "x1", "x2", "top_depth", "bottom_depth"]:
+            if param in params:
+                params[param] = 1000. * params[param]
 
         
 
@@ -259,25 +274,34 @@ def practical_general_2d_generic(
         pickle_table = DisplacementTable.from_xy_array(fault_patch_dict, disp_x_m)
 
     user_disps = slip_magnitude * user_table.greens_functions_array(rake=rake, vertical_only=True).flatten()
-    user_disps[disp_x == 0.] = 0.0  # set displacements to zero at the origin
+    if not data_only:
+        user_disps[disp_x == 0.] = 0.0  # set displacements to zero at the origin
     if pickle_file is not None:
         pickle_disps = params["slip_magnitude"] * pickle_table.greens_functions_array(rake=params["rake"], vertical_only=True).flatten()
-        pickle_disps[disp_x == 0.] = 0.0  # set displacements to zero at the origin
-    plt.close('all')
-    fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-    ax.plot(disp_x, user_disps, label="Your Displacement", color='orange')
-    if pickle_file is not None:
-        ax.plot(disp_x, pickle_disps, label="Target Displacement", color='black')
+        if not data_only:
+            pickle_disps[disp_x == 0.] = 0.0  # set displacements to zero at the origin
+    
+    if data_only:
+        return disp_x, user_disps
+    
+    else:
+        plt.close('all')
+        fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+        ax.plot(disp_x, user_disps, label="Your Displacement", color='orange')
+        if pickle_file is not None:
+            ax.plot(disp_x, pickle_disps, label="Target Displacement", color='black')
 
-    ax.set_xlabel("X (km)")
-    ax.set_ylabel("Displacement (m)")
+        ax.set_xlabel("X (km)")
+        ax.set_ylabel("Displacement (m)")
 
-    max_y = np.max(np.abs(np.hstack([user_disps, pickle_disps]))) * 1.2
-    ax.set_ylim(-max_y, max_y)
-    ax.set_xlim(min_x, max_x)
-    ax.legend()
-    # Print the current timestamp
-    print("Timestamp:", datetime.datetime.now())
+        
+
+        max_y = np.max(np.abs(np.hstack([user_disps, pickle_disps]))) * 1.2
+        ax.set_ylim(-max_y, max_y)
+        ax.set_xlim(min_x, max_x)
+        ax.legend()
+        # Print the current timestamp
+        print("Timestamp:", datetime.datetime.now())
 
 def read_and_print_parameters(pickle_file: str, in3d: bool = False) -> None:
     """
@@ -309,7 +333,7 @@ def practical_general_2d_fixed_top_only(
     :param y1: Y coordinate of the first point.
     :param y2: Y coordinate of the second point.
     :param x1: X coordinate of the first point.
-    :param x2: X coordinate of the second point.
+    :param x2: X coordinate of the first point.
     :param dip: Dip angle of the fault.
     :param top_depth: Top depth of the fault.
     :param bottom_depth: Bottom depth of the fault.
@@ -340,8 +364,145 @@ def practical_general_2d_fixed_top_only(
         min_x=min_x, max_x=max_x, x_inc=x_inc)
     
 
+tt_dip = 12.
+tt_slip = 10.
+tt_rake = 90.
+tt_min_x = -150.
+tt_max_x = 150.
+tt_x_inc = 1.
+depth_x0 = -30.
+subduction_top_x = (-1. * depth_x0) / np.tan(np.radians(tt_dip))
+
+min_tt_y = -50.
+max_tt_y = -10.
+
+max_disp_y = 5.
+min_disp_y = -5.
+
+def sz_depth_x(depth: float) -> float:
+    """
+    Function to calculate the x coordinate for a given depth.
+    :param depth: Depth of the fault.
+    :return: X coordinate for the given depth.
+    """
+    return subduction_top_x + depth / np.tan(np.radians(tt_dip))
 
 
+
+def tremor_trigger(bottom_depth: float = -50., top_depth: float = -10.):
+    """
+    Function to calculate the dislocation displacement for a given set of parameters.
+    :param bottom_depth: Bottom depth of the fault.
+    :param top_depth: Top depth of the fault.
+    :return: Displacement array or table depending on input parameters.
+    """
+    
+    # Check if all required parameters are provided
+    if any(param is None for param in [bottom_depth, top_depth]):
+        raise ValueError("Make sure you provide both top and bottom depth")
+    
+    if any([param > 0. for param in [bottom_depth, top_depth]]):
+        raise ValueError("Make sure you provide negative values for both top and bottom depth")
+    
+    for name, param in zip(["top_depth", "bottom_depth"], [top_depth, bottom_depth]):
+        if not min_tt_y <= param <= max_tt_y:
+            raise ValueError(f"Make sure you provide a {name} between {min_tt_y} and {max_tt_y}")
+        
+    
+    if bottom_depth >= top_depth:
+        raise ValueError("Make sure you provide a bottom depth deeper than top depth")
+    
 
     
+    # read parameters from pickle file if provided
+    top_x = sz_depth_x(top_depth)
+    bottom_x = sz_depth_x(bottom_depth)
+    xvals, disps = practical_general_2d_generic(y1=fixed_y1, y2=fixed_y2, x1=top_x, x2=top_x,
+                                                    dip=tt_dip, top_depth=top_depth, bottom_depth=bottom_depth,
+                                                    slip_magnitude=tt_slip, rake=tt_rake, pickle_file=None,
+                                                    min_x=tt_min_x, max_x=tt_max_x, x_inc=tt_x_inc, data_only=True)
     
+    disp0 = disps[xvals == 0.][0]
+    
+
+
+    # plot the displacements
+    plt.close('all')
+    fig, ax = plt.subplots(2, 1,figsize=(10, 5), sharex=True)
+    ax[0].vlines(x=0., color='black', linestyle='--', ymin=min_disp_y, ymax=max_disp_y)
+    ax[0].set_ylim(min_disp_y, max_disp_y)
+    ax[0].plot(xvals, disps, label="Uplift", color='red')
+    ax[0].plot(xvals[disps < 0.], disps[disps < 0.], color='blue', label="Subsidence")
+    ax[0].set_xlim(tt_min_x, tt_max_x)
+    ax[0].text(x=0., y=4., s="Madeup Island", ha='center', va='top', fontsize=12,
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
+    text_string = f"{disp0:.2f} m Uplift at Madeup Island" if disp0 >= 0. else f"{-disp0:.2f} m Subsidence at Madeup Island"
+    ax[0].text(x=145., y=-4.5, s=text_string, ha='right', va='bottom', fontsize=12,
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
+    ax[0].scatter(x=0., y=disp0, color='black', marker='o', s=30)
+    
+    ax[1].set_xlabel("Distance from Madeup Island (km)")
+    #ax[0].set_ylabel("Modelled displacement (m)")
+    ax[0].legend()
+
+    ax[1].vlines(x=0., color='black', linestyle='--', ymin=min_tt_y - 10., ymax=0.)
+    ax[1].set_ylim(min_tt_y - 10., 0.)
+    ax[1].plot([sz_depth_x(min_tt_y), sz_depth_x(max_tt_y)], [min_tt_y, max_tt_y], color='0.7', linestyle='-')
+    ax[1].plot([sz_depth_x(bottom_depth), sz_depth_x(top_depth)], [bottom_depth, top_depth], color='black', linestyle='-', lw=3)
+    ax[0].set_ylabel("Modelled displacement (m)")
+    ax[1].set_ylabel("SZ Depth (km)")
+    
+    return xvals, disps
+
+
+def practical_general_2d_no_fixed_top(top_x: float = 0., top_depth: float = 0., bottom_depth: float = -20.,
+    dip: float = 45., slip_magnitude: float = 10., rake: float = 90., pickle_file: str = None,
+    min_x: float = -100., max_x: float = 100., x_inc: float = 1.) -> np.ndarray:
+    """
+    Function to calculate the dislocation displacement for a given set of parameters.
+    :param y1: Y coordinate of the first point.
+    :param y2: Y coordinate of the second point.
+    :param x1: X coordinate of the first point.
+    :param x2: X coordinate of the first point.
+    :param dip: Dip angle of the fault.
+    :param top_depth: Top depth of the fault.
+    :param bottom_depth: Bottom depth of the fault.
+    :param slip_magnitude: Slip magnitude of the fault.
+    :param rake: Rake angle of the fault.
+    :param pickle_file: Path to the pickle file to read parameters from.
+    :param grid: DisplacementGrid object to calculate displacements on a grid.
+    :param table: DisplacementTable object to calculate displacements at specific points.
+    :param fault_patch: FaultPatch object to represent the fault patch.
+    :param min_x: Minimum x coordinate for the profile.
+    :param max_x: Maximum x coordinate for the profile.
+    :param x_inc: Increment for the x coordinate.
+    :return: Displacement array or table depending on input parameters.
+
+    """
+    
+    # Check if all required parameters are provided
+    if any(param is None for param in [top_x, top_depth, bottom_depth, dip, slip_magnitude, rake]):
+        raise ValueError("All parameters must be provided")
+    
+    assert top_depth > bottom_depth, f"Top depth {top_depth} must be greater than bottom depth {bottom_depth}"
+    assert rake in [90, 270.], f"Rake {rake} must be either 90 (reverse) or 270 (normal) degrees"
+
+    practical_general_2d_generic(y1=fixed_y1, y2=fixed_y2, x1=top_x, x2=top_x,
+        dip=dip, top_depth=top_depth, bottom_depth=bottom_depth,
+        slip_magnitude=slip_magnitude, rake=rake, pickle_file=pickle_file,
+        min_x=min_x, max_x=max_x, x_inc=x_inc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
