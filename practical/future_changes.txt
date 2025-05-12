@@ -1,0 +1,9 @@
+1.b/c: Reword to make it clearer that c is asking for switch to footwall with steeper dip.
+1f: Some confusion about horizontal location.
+1. A student deleted the box. For answers.
+1h/i: Width of region of subsidence is equivalent to longer wavelength... Basically the same question.
+1k: outdated instructions from when interactive plots were in main notebook.
+2. Students not running cell at top, getting error messages
+2. Students don't realise you can have e.g. 0.3 m of slip.
+3. vagueness on "prameters" e.g. top/bottom depth vs. dip etc (which you can't change).
+3f. Vague question.
