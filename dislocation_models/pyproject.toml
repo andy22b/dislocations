@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dislocations"
+version = "0.1.0"
+description = "Dislocation modelling tools for GNS colleagues"
+authors = [{name = "Andy Howell", email = "a.howell@gns.cri.nz"}]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "shapely",
+    "matplotlib",
+    "geopandas",
+    "pandas",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dislocations*"]
+
+[tool.setuptools.package-data]
+dislocations = ["coast_and_interface/*"]

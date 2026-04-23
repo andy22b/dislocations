@@ -15,8 +15,8 @@ from dislocations.utilities import geopandas_polygon_to_gmt
 from copy import deepcopy
 
 
-mu = np.array([30.0e9])
-nu = np.array([0.25])
+mu = np.array(30.0e9)
+nu = np.array(0.25)
     
 
 
